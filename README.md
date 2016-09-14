@@ -1,5 +1,6 @@
 # danmu
 弹幕下载代码
+
 1. 先运行来建立hash表:
 
 python create_hash.py
