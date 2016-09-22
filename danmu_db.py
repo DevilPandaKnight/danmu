@@ -93,6 +93,7 @@ def parse_xml(xml_file):
 		index = create_index_table(len(danmu_list))
 	except IOError:
 		print("cannot open the file %s" % xml_file)
+		hash_table.close()
 		exit()
 
 	user_Thread = []
