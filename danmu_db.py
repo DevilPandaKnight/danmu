@@ -67,13 +67,12 @@ def add_user_name(danmu,index,hash_table,max_num):
 				#print("%s\n%s%s" % ("has no hash "+ sp[6], d,'\n-----------------------------------------------------\n') )
 
 
-def create_index_table(length,maxNumOfThread=20):
-	number_of_thread = length/5+1
+def create_index_table(length,maxNumOfThread=20,start=0):
+	number_of_thread = abs(length-start)/5+1
 	if number_of_thread > maxNumOfThread:
 		number_of_thread = maxNumOfThread
-	dx = length/number_of_thread
-	start = 0
-	end = dx
+	dx = (length-start)/number_of_thread
+	end = start+dx
 	index = []
 	for x in range(number_of_thread):
 		if x == number_of_thread-1:
@@ -150,7 +149,7 @@ The following options shall be supported:
 	cid_number = ''
 	if len(av_number) != 0:
 		# 处理 bilibili 视频页面
-		video_page_url = 'http://www.bilibili.tv/video/%s' % av_number
+		video_page_url = 'http://www.bilibili.com/video/%s' % av_number
 		video_page_request = urllib2.Request(video_page_url)
 		video_page_gz = urllib2.urlopen(video_page_request).read()
 		# gzip 解压

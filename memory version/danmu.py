@@ -16,11 +16,22 @@ import os
 import re
 import urllib2
 import zlib
-
-hash_table = [{},{},{},{},{}]
-def create_hash(id_num):
-	hash_table[id_num] = {"%.8x" % (binascii.crc32('%s' % x) & 0xffffffff):x for x in range(id_num*10000000,(id_num+1)*10000000)}
 	
+	
+def create_index_table(length,maxNumOfThread=20,start=0):
+	number_of_thread = abs(length-start)/5+1
+	if number_of_thread > maxNumOfThread:
+		number_of_thread = maxNumOfThread
+	dx = (length-start)/number_of_thread
+	end = start+dx
+	index = []
+	for x in range(number_of_thread):
+		if x == number_of_thread-1:
+			end = length
+		index.append((start,end))
+		start = start + dx
+		end = end + dx
+	return index
 
 def get_danmu(json_data,cid,folder,index):
 	for i in range(index[0],index[1]):
@@ -44,66 +55,83 @@ def get_danmu_to_set(json_data,cid,danmu_set,index):
 		comment_then_xml = zlib.decompressobj(-zlib.MAX_WBITS).decompress(comment_then_zip)
 		danmu_set[0] = danmu_set[0].union(comment_then_xml.split('\n'))
 
-def add_user_name(danmu,index):
+def add_user_name(danmu_userID,index):
 	for i in range(index[0],index[1]):
-		d = danmu[i]
+		d = danmu_userID[i]
+		if d[0] == "<":
+			print("name %s, id: %s" % (d[0],d[1]))
+			continue
+		try:
+			if d[1] == -1:
+				print("cannot find hash:%s \n%s\n-----------------------------------------------------\n" % (d[2], d[0]))
+				continue
+			video_page_url = 'http://space.bilibili.com/%s' % d[1]
+			video_page_request = urllib2.Request(video_page_url)
+			video_page_gz = urllib2.urlopen(video_page_request).read()
+			start = video_page_gz.find("<title>")+7
+			end = video_page_gz.find("的个人空间")
+			new = video_page_gz[start:end]
+			if len(new) > 100:
+				print("cannot find user name",d[0],video_page_url)
+				continue
+			print(d[0]+"\n用户名: "+new+'\n-----------------------------------------------------\n')
+		except urllib2.HTTPError as err:
+			print("cannot open: "+video_page_url)
+
+
+def create_id_table(hash_dict,length,count,index,lock,result):
+	hash_index = index[0]
+	while length > count[0] and hash_index < index[1]:
+		user_hash = "%.8x" % (binascii.crc32('%s' % hash_index) & 0xffffffff)
+		if user_hash in hash_dict:
+			lock.acquire()
+			count[0] = count[0] + 1
+			result.append((hash_dict[user_hash],"%s" % hash_index,user_hash))
+			print(user_hash,count,hash_index)
+			lock.release()
+		hash_index = hash_index + 1
+
+def getUserID(danmu):
+	hash_dict = {}
+	for d in danmu:
 		sp = d.split(',')
 		if len(sp) >= 7:
-			if sp[6] in hash_table[0]:
-				try:				
-					video_page_url = 'http://space.bilibili.com/%s' % hash_table[0][sp[6]]
-					video_page_request = urllib2.Request(video_page_url)
-					video_page_gz = urllib2.urlopen(video_page_request).read()
-					start = video_page_gz.find("<title>")+7
-					end = video_page_gz.find("的个人空间")
-					new = video_page_gz[start:end]
-					print(d+"\n用户名: "+new+'\n-----------------------------------------------------\n')
-				except urllib2.HTTPError as err:
-					print("cannot open: "+video_page_url)
-			else:
-				print("%s\n%s%s" % ("has no hash "+ sp[6], d,'\n-----------------------------------------------------\n') )
-
-
-
-def create_index_table(length,maxNumOfThread=20):
-	number_of_thread = length/5+1
-	if number_of_thread > maxNumOfThread:
-		number_of_thread = maxNumOfThread
-	dx = length/number_of_thread
-	start = 0
-	end = dx
-	index = []
-	for x in range(number_of_thread):
-		if x == number_of_thread-1:
-			end = length
-		index.append((start,end))
-		start = start + dx
-		end = end + dx
-	return index
-		
-
-def parse_xml(xml_file):
-	print("正在初始化hash表...")
-	hash_Tread = []
-	for x in range(5):
-		t1 = threading.Thread(target=create_hash, args = (x,))
+			hash_dict[sp[6]] = d
+	result = []
+	for x in hash_dict.keys():
+		if x[0] == 'D':
+			result.append((hash_dict[x],-1,x))
+			hash_dict.pop(x)
+	count = [0]
+	hash_index = 0
+	length = len(hash_dict)
+	lock = threading.Semaphore()
+	index = create_index_table(20000000,500)
+	index += create_index_table(30000000,300,20000000)
+	index += create_index_table(40000000,200,30000000)
+	index += create_index_table(50000000,100,40000000)
+	user_Thread = []
+	for i in range(len(index)):
+		t1 = threading.Thread(target=create_id_table, args = (hash_dict,length,count,index[i],lock,result))
 		t1.daemon = True
 		t1.start()
-		hash_Tread.append(t1)
-		
+		user_Thread.append(t1)
+	for x in user_Thread:
+		x.join()
+	print(len(result),len(hash_dict))
+	temp = [x[2] for x in result]
+	for x in hash_dict.keys():
+		if x not in temp:
+			print(x,hash_dict[x])
+	return result
+
+def parse_xml(xml_file):
 	try:
-		danmu_list = [x.strip() for x in open(xml_file)]
+		danmu_list = getUserID([x.strip() for x in open(xml_file)])
 		index = create_index_table(len(danmu_list))
 	except IOError:
 		print("cannot open the file %s" % xml_file)
 		exit()
-	
-	for x in hash_Tread:
-		x.join()
-	hash_table[0].update(hash_table.pop())
-	hash_table[0].update(hash_table.pop())
-	hash_table[0].update(hash_table.pop())
-	hash_table[0].update(hash_table.pop())
 	
 	user_Thread = []
 	for i in range(len(index)):
@@ -150,15 +178,6 @@ The following options shall be supported:
 		av_number = options.av_number
 	if len(av_number) == 0 and len(options.cid_number) == 0:
 		parser.error("wrong number of operands")
-	
-	hash_Thread = []
-	if options.n == True:
-		print("正在初始化hash表...")
-		for x in range(5):
-			t1 = threading.Thread(target=create_hash, args = (x,))
-			t1.daemon = True
-			t1.start()
-			hash_Thread.append(t1)
 
 	cid_number = ''
 	if len(av_number) != 0:
@@ -224,17 +243,11 @@ The following options shall be supported:
 		x.join()		
 	
 	if options.n:
-		for x in hash_Thread:
-			x.join()
-		hash_table[0].update(hash_table.pop())
-		hash_table[0].update(hash_table.pop())
-		hash_table[0].update(hash_table.pop())
-		hash_table[0].update(hash_table.pop())
-		danmu_list = list(total_danmu[0])
-		index = create_index_table(len(danmu_list),10)
+		danmu_userID = getUserID(total_danmu[0])
+		index = create_index_table(len(danmu_userID),10)
 		user_Thread = []
 		for i in range(len(index)):
-			t1 = threading.Thread(target=add_user_name, args = (danmu_list,index[i]))
+			t1 = threading.Thread(target=add_user_name, args = (danmu_userID,index[i]))
 			t1.daemon = True
 			t1.start()
 			user_Thread.append(t1)

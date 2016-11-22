@@ -16,13 +16,12 @@ def create_hash(index,lock):
 		db[temp] = x
 		lock.release()
 
-def create_index_table(length,maxNumOfThread=20):
-	number_of_thread = length/5+1
+def create_index_table(length,maxNumOfThread=20,start=0):
+	number_of_thread = abs(length-start)/5+1
 	if number_of_thread > maxNumOfThread:
 		number_of_thread = maxNumOfThread
-	dx = length/number_of_thread
-	start = 0
-	end = dx
+	dx = (length-start)/number_of_thread
+	end = start+dx
 	index = []
 	for x in range(number_of_thread):
 		if x == number_of_thread-1:
