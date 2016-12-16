@@ -55,7 +55,7 @@ def get_danmu_to_set(json_data,cid,danmu_set,index):
 		comment_then_xml = zlib.decompressobj(-zlib.MAX_WBITS).decompress(comment_then_zip)
 		danmu_set[0] = danmu_set[0].union(comment_then_xml.split('\n'))
 
-def add_user_name(danmu_userID,index):
+def add_user_name(danmu_userID,index,result_list,lock):
 	for i in range(index[0],index[1]):
 		d = danmu_userID[i]
 		if d[0] == "<":
@@ -63,7 +63,13 @@ def add_user_name(danmu_userID,index):
 			continue
 		try:
 			if d[1] == -1:
-				print("cannot find hash:%s \n%s\n-----------------------------------------------------\n" % (d[2], d[0]))
+				temp = "cannot find hash: %s\n" % d[2]
+				for x in d[0]:
+					temp += x+'\n'
+				temp += "-----------------------------------------------------\n"
+				lock.acquire()
+				result_list.append(temp)
+				lock.release()
 				continue
 			video_page_url = 'http://space.bilibili.com/%s' % d[1]
 			video_page_request = urllib2.Request(video_page_url)
@@ -74,7 +80,13 @@ def add_user_name(danmu_userID,index):
 			if len(new) > 100:
 				print("cannot find user name",d[0],video_page_url)
 				continue
-			print(d[0]+"\n用户名: "+new+'\n-----------------------------------------------------\n')
+			temp = "用户名: "+new+'\n'
+			for x in d[0]:
+				temp += x + '\n'
+			temp += "-----------------------------------------------------\n"
+			lock.acquire()
+			result_list.append(temp)
+			lock.release()
 		except urllib2.HTTPError as err:
 			print("cannot open: "+video_page_url)
 
@@ -87,7 +99,8 @@ def create_id_table(hash_dict,length,count,index,lock,result):
 			lock.acquire()
 			count[0] = count[0] + 1
 			result.append((hash_dict[user_hash],"%s" % hash_index,user_hash))
-			print(user_hash,count,hash_index)
+			sys.stdout.write("\r"+"%s / %d     " % (count[0],length))
+			sys.stdout.flush()
 			lock.release()
 		hash_index = hash_index + 1
 
@@ -96,7 +109,9 @@ def getUserID(danmu):
 	for d in danmu:
 		sp = d.split(',')
 		if len(sp) >= 7:
-			hash_dict[sp[6]] = d
+			if sp[6] not in hash_dict:
+				hash_dict[sp[6]] = []
+			hash_dict[sp[6]].append(d)
 	result = []
 	for x in hash_dict.keys():
 		if x[0] == 'D':
@@ -118,11 +133,11 @@ def getUserID(danmu):
 		user_Thread.append(t1)
 	for x in user_Thread:
 		x.join()
-	print(len(result),len(hash_dict))
+	print("")
 	temp = [x[2] for x in result]
 	for x in hash_dict.keys():
 		if x not in temp:
-			print(x,hash_dict[x])
+			result.append((hash_dict[x],-1,x))
 	return result
 
 def parse_xml(xml_file):
@@ -134,14 +149,19 @@ def parse_xml(xml_file):
 		exit()
 	
 	user_Thread = []
+	result_list = []
+	lock = threading.Semaphore()
+	print("正在下载用户名...")
 	for i in range(len(index)):
-		t1 = threading.Thread(target=add_user_name, args = (danmu_list,index[i]))
+		t1 = threading.Thread(target=add_user_name, args = (danmu_list,index[i],result_list,lock))
 		t1.daemon = True
 		t1.start()
 		user_Thread.append(t1)
 
 	for x in user_Thread:
 		x.join()
+	for x in result_list:
+		print(x)
 
 def main():
 	#define massages
@@ -157,11 +177,14 @@ The following options shall be supported:
 -s
 	把弹幕以时间分到不同的文件夹里.
 -f
-	接受一个弹幕xml文件，然后打印出用户名和弹幕
+	接受一个弹幕xml文件，然后打印出用户名和弹幕.
+-r
+	获取最近发送的弹幕和用户.
 	"""
 	#define options
 	parser = OptionParser(version=version_msg,usage=usage_msg)
-	parser.add_option("-n", action="store_true", default=False,help="在所有弹幕后面加用户名 (用时较长).")
+	parser.add_option("-n", action="store_true", default=False,help="在所有弹幕后面加用户名.")
+	parser.add_option("-r", action="store_true", default=False,help="获取最近发送的弹幕和用户.")
 	parser.add_option("-s", action="store_true", default=False,help="把弹幕以时间分到不同的文件夹里.")
 	parser.add_option("-a", "--av" ,dest="av_number", default='',help="输入av号码，如：av3934631，或者 av3934631/index_1.html")
 	parser.add_option("-c", "--cid", dest="cid_number", default='',help="输入cid号码，如：6645564")
@@ -200,7 +223,30 @@ The following options shall be supported:
 	
 	if len(cid_number) == 0:
 		cid_number = options.cid_number
-	
+	if options.r:
+		print("正在下载用户名...")
+		url = "http://comment.bilibili.tv/%s.xml" % cid_number
+		comments_page_request = urllib2.Request(url)
+		comments_page_zip = urllib2.urlopen(comments_page_request).read()
+		comments_page_json = zlib.decompressobj(-zlib.MAX_WBITS).decompress(comments_page_zip)
+		total_danmu = comments_page_json.split('\n')
+		danmu_userID = getUserID(total_danmu)
+		index = create_index_table(len(danmu_userID),10)
+		user_Thread = []
+		result_list = []
+		lock = threading.Semaphore()
+		for i in range(len(index)):
+			t1 = threading.Thread(target=add_user_name, args = (danmu_userID,index[i],result_list,lock))
+			t1.daemon = True
+			t1.start()
+			user_Thread.append(t1)
+
+		for x in user_Thread:
+			x.join()
+		for x in result_list:
+			print(x)
+		exit()
+
 	# 获取视频所有历史弹幕
 	comments_page_url = 'http://comment.bilibili.tv/rolldate,%s' % cid_number
 	comments_page_request = urllib2.Request(comments_page_url)
@@ -212,7 +258,7 @@ The following options shall be supported:
 	# 解析历史弹幕信息
 	total_danmu = [set()]
 	comments_python_object = json.loads(comments_page_json)
-	print("正在下载弹幕...")
+	print("正在下载用户名...")
 	index = create_index_table(len(comments_python_object))
 	danmu_Thread = []
 	if options.s == True:
@@ -246,14 +292,18 @@ The following options shall be supported:
 		danmu_userID = getUserID(total_danmu[0])
 		index = create_index_table(len(danmu_userID),10)
 		user_Thread = []
+		result_list = []
+		lock = threading.Semaphore()
 		for i in range(len(index)):
-			t1 = threading.Thread(target=add_user_name, args = (danmu_userID,index[i]))
+			t1 = threading.Thread(target=add_user_name, args = (danmu_userID,index[i],result_list,lock))
 			t1.daemon = True
 			t1.start()
 			user_Thread.append(t1)
 
 		for x in user_Thread:
 			x.join()
+		for x in result_list:
+			print(x)
 		exit()
 		
 	for x in total_danmu[0]:
