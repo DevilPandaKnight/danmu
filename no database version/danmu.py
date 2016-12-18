@@ -224,14 +224,15 @@ The following options shall be supported:
 	if len(cid_number) == 0:
 		cid_number = options.cid_number
 	if options.r:
-		print("正在下载用户名...")
+		print("正在下载弹幕...")
 		url = "http://comment.bilibili.tv/%s.xml" % cid_number
 		comments_page_request = urllib2.Request(url)
 		comments_page_zip = urllib2.urlopen(comments_page_request).read()
 		comments_page_json = zlib.decompressobj(-zlib.MAX_WBITS).decompress(comments_page_zip)
 		total_danmu = comments_page_json.split('\n')
+		print("正在下载用户名...")
 		danmu_userID = getUserID(total_danmu)
-		index = create_index_table(len(danmu_userID),10)
+		index = create_index_table(len(danmu_userID))
 		user_Thread = []
 		result_list = []
 		lock = threading.Semaphore()
@@ -258,7 +259,7 @@ The following options shall be supported:
 	# 解析历史弹幕信息
 	total_danmu = [set()]
 	comments_python_object = json.loads(comments_page_json)
-	print("正在下载用户名...")
+	print("正在下载弹幕...")
 	index = create_index_table(len(comments_python_object))
 	danmu_Thread = []
 	if options.s == True:
@@ -289,8 +290,9 @@ The following options shall be supported:
 		x.join()		
 	
 	if options.n:
+		print("正在下载用户名...")
 		danmu_userID = getUserID(total_danmu[0])
-		index = create_index_table(len(danmu_userID),10)
+		index = create_index_table(len(danmu_userID))
 		user_Thread = []
 		result_list = []
 		lock = threading.Semaphore()
