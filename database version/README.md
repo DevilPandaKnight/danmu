@@ -1,3 +1,11 @@
+# danmu
+弹幕下载代码
+这个文件用法和danmu.py一样，不过这个需要建hash表。
+
+1.先运行下面代码建立hash表（大概需要1个半小时，目前找不出更快的办法。。）:
+
+python create_hash.py
+
 2.可以直接下载弹幕
 
 python danmu_db.py  av＊＊＊＊
