@@ -121,10 +121,10 @@ def getUserID(danmu):
 	hash_index = 0
 	length = len(hash_dict)
 	lock = threading.Semaphore()
-	index = create_index_table(20000000,500)
-	index += create_index_table(30000000,300,20000000)
-	index += create_index_table(40000000,200,30000000)
-	index += create_index_table(50000000,100,40000000)
+	index = create_index_table(20000000,5)
+	index += create_index_table(30000000,3,20000000)
+	index += create_index_table(40000000,2,30000000)
+	index += create_index_table(50000000,1,40000000)
 	user_Thread = []
 	for i in range(len(index)):
 		t1 = threading.Thread(target=create_id_table, args = (hash_dict,length,count,index[i],lock,result))
@@ -310,7 +310,7 @@ The following options shall be supported:
 		
 	for x in total_danmu[0]:
 		print(x)		
-	
+
 	
 	
 if __name__ == "__main__":
